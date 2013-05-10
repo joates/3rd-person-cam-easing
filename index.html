@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Three.js: 3rd person camera</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+  <style>
+    body {
+      font-family: Monospace;
+      font-weight: bold;
+      font-size: 14px;
+      background-color: #ccccff;
+      margin: 0px;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+
+  <script src="js/three.min.js"></script>
+  <script src="js/tween.min.js"></script>
+  <script src="js/OrbitControls.js"></script>
+  <script src="js/THREEx.KeyboardState.js"></script>
+
+  <script>
+
+    /** Adapted by joates (May-2013)
+        from..
+
+        Three.js "tutorials by example"
+        Author: Lee Stemkoski
+        Date: March 2013 (three.js v56)
+     */
+
+    // MAIN
+    var container, scene, renderer,
+        clock = new THREE.Clock(),
+        keyboard = new THREEx.KeyboardState();
+
+    var player,
+        camera,
+        cameraControls,
+        lookAround = false;
+
+    init();
+    animate();
+
+    // FUNCTIONS     
+    function init() {
+      // SCENE
+      scene = new THREE.Scene();
+      // CAMERA
+      var WIDTH = window.innerWidth,
+          HEIGHT = window.innerHeight;
+      camera = new THREE.PerspectiveCamera( 40, WIDTH/HEIGHT, 1, 10000);
+      //camera.useQuaternion = true;
+      scene.add(camera);
+
+      // CONTROLS
+      cameraControls = new THREE.OrbitControls( camera );
+      cameraControls.userPan = false;
+
+      // RENDERER
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize( WIDTH, HEIGHT );
+      container = document.createElement( 'div' );
+      document.body.appendChild( container );
+      container.appendChild( renderer.domElement );
+
+      // LIGHT
+      var light = new THREE.PointLight( 0xffffff );
+      light.position.set( 0, 250, 0 );
+      scene.add( light );
+
+      // FLOOR
+      var floorTexture = new THREE.ImageUtils.loadTexture( 'images/water.jpg' );
+      floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping; 
+      floorTexture.repeat.set( 0.5, 0.8 );
+      var floorMaterial = new THREE.MeshBasicMaterial( { map: floorTexture, side: THREE.DoubleSide } );
+      var floorGeometry = new THREE.PlaneGeometry( 1000, 1000 );
+      var floor = new THREE.Mesh( floorGeometry, floorMaterial );
+      floor.position.y = -0.5;
+      floor.rotation.x = Math.PI / 2;
+      scene.add( floor );
+
+      // FLOOR GRID
+      var gridW = 100; // grid size
+      var gridH = 100; //
+      var numW = 10;   // grid quantity
+      var numH = 10;   //
+      var grid = new THREE.Mesh( new THREE.PlaneGeometry( gridW*numW, gridH*numH, numW, numH ), new THREE.MeshBasicMaterial({ color: 0x442244, wireframe: true, wireframeLinewidth: 2 }) );
+      grid.position.y = -0.4;
+      grid.rotation.x = Math.PI / 2;
+      scene.add( grid );
+
+      // SKYBOX/FOG
+      var skyBoxGeometry = new THREE.CubeGeometry( 10000, 10000, 10000 );
+      var skyBoxMaterial = new THREE.MeshBasicMaterial({ color: 0x9999ff, side: THREE.BackSide });
+      var skyBox = new THREE.Mesh( skyBoxGeometry, skyBoxMaterial );
+      // scene.add(skyBox);
+      scene.fog = new THREE.FogExp2( 0x9999ff, 0.00025 );
+  
+      ////////////
+      // CUSTOM //
+      ////////////
+  
+      // create an array with six textures for a cool cube
+      var materialArray = [];
+      materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'images/xpos.png' ) }));
+      materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'images/xneg.png' ) }));
+      materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'images/ypos.png' ) }));
+      materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'images/yneg.png' ) }));
+      materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'images/zpos.png' ) }));
+      materialArray.push(new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'images/zneg.png' ) }));
+      var cubeGeom = new THREE.CubeGeometry( 50, 50, 50, 1, 1, 1, materialArray );
+      var cubeMat = new THREE.MeshFaceMaterial(materialArray);
+      player = new THREE.Mesh( cubeGeom, cubeMat );
+      player.position.set( 0, 25.1, 0 );
+      //player.useQuaternion = true;
+      scene.add( player );  
+
+      // EVENTS.
+      window.addEventListener('resize', onWindowResize, false);
+      document.addEventListener( 'mousedown', onDocumentMouseDown, false );
+    }
+
+    function onWindowResize(event) {
+      WIDTH  = window.innerWidth;
+      HEIGHT = window.innerHeight;
+      renderer.setSize(WIDTH, HEIGHT);
+      camera.aspect = WIDTH / HEIGHT;
+      camera.updateProjectionMatrix();
+    }
+
+    function onDocumentMouseDown( event ) {
+      event.preventDefault();
+      lookAround = true;
+      cameraControls.center.copy( player.position );
+      document.addEventListener( 'mouseup', onDocumentMouseUp, false );
+    }
+
+    function onDocumentMouseUp( event ) {
+      lookAround = false;
+      document.removeEventListener( 'mouseup', onDocumentMouseUp );
+    }
+
+    function animate() {
+      requestAnimationFrame( animate );
+      update();
+      render();    
+    }
+
+    function update() {
+      var delta = clock.getDelta(); // seconds.
+      var moveDistance = 200 * delta; // 200 pixels per second
+      var rotateAngle = Math.PI / 2 * delta;   // pi/2 radians (90 degrees) per second
+  
+      TWEEN.update();
+      cameraControls.update();
+
+      // local transformations
+
+      // move forwards/backwards/left/right
+      if ( keyboard.pressed("W") )
+        player.translateZ( -moveDistance );
+      if ( keyboard.pressed("S") )
+        player.translateZ(  moveDistance );
+      if ( keyboard.pressed("Q") )
+        player.translateX( -moveDistance );
+      if ( keyboard.pressed("E") )
+        player.translateX(  moveDistance );  
+
+      // rotate left/right/up/down
+      var rotation_matrix = new THREE.Matrix4().identity();
+      if ( keyboard.pressed("A") )
+        rotation_matrix = new THREE.Matrix4().makeRotationY(rotateAngle);
+      if ( keyboard.pressed("D") )
+        rotation_matrix = new THREE.Matrix4().makeRotationY(-rotateAngle);
+      if ( keyboard.pressed("R") )
+        rotation_matrix = new THREE.Matrix4().makeRotationX(rotateAngle);
+      if ( keyboard.pressed("F") )
+        rotation_matrix = new THREE.Matrix4().makeRotationX(-rotateAngle);
+      if ( keyboard.pressed("A") || keyboard.pressed("D") || 
+           keyboard.pressed("R") || keyboard.pressed("F") ) {
+        player.matrix.multiply(rotation_matrix);
+        player.rotation.setEulerFromRotationMatrix(player.matrix);
+      }
+  
+      var relativeCameraOffset = new THREE.Vector3( 0, 50, 300 );
+      var cameraOffset = relativeCameraOffset.applyMatrix4( player.matrixWorld );
+
+      // Camera TWEEN.
+      if (!lookAround) {
+        new TWEEN.Tween( camera.position ).to( {
+          x: cameraOffset.x,
+          y: cameraOffset.y,
+          z: cameraOffset.z }, 90 )
+        .interpolation( TWEEN.Interpolation.Bezier )
+        .easing( TWEEN.Easing.Sinusoidal.InOut ).start();
+
+        camera.lookAt( player.position );
+      }
+
+      /*
+      // Camera SLERP.
+      var qm = new THREE.Quaternion();
+      THREE.Quaternion.slerp(player.quaternion, camera.quaternion, qm, delta);
+      mesh.quaternion = qm;
+      mesh.quaternion.normalize();
+      */
+    }
+
+    function render() {
+      renderer.render( scene, camera );
+    }
+
+  </script>
+</body>
+</html>
